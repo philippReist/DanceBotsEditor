@@ -94,7 +94,7 @@ def _createFolderElement(parentElement: ET.Element, idStr: str, nameStr: str = "
 
 def _createDirectoryRef(parentElement: ET.Element, idStr: str) -> ET.Element:
     newDirElement = ET.SubElement(parentElement, "DirectoryRef")
-    newDirElement.set("Id", "ApplicationProgramsFolder")
+    newDirElement.set("Id", idStr)
     return newDirElement
 
 def _createComponent(dirRefParent: ET.Element, componentsRoot: ET.Element, idStr:str) -> ET.Element:
@@ -106,9 +106,34 @@ def _createComponent(dirRefParent: ET.Element, componentsRoot: ET.Element, idStr
     cref.set("Id", idStr)
     return component
 
+def _addFile(component: ET.Element, srcStr: str, idStr:str) -> ET.Element:
+    file = ET.SubElement(component, "File")
+    file.set("Id", idStr)
+    file.set("Source", srcStr)
+    file.set("KeyPath", "yes")
+    if srcStr[-3:] == "exe":
+        file.set("Checksum", "yes")
+
+def _addFiles(rootDir: str, rootFolderElement: ET.Element, productElement: ET.Element, componentsRoot):
+    items = os.listdir(rootDir)
+    rootFolderId = rootFolderElement.get("Id")
+    curDirRef = None  # lazy add only if a file is present
+    for item in items:
+ 
+        itemID = rootFolderId + "_" + str(item)
+        if os.path.isdir(item):
+            folderItem = _createFolderElement(rootFolderElement, itemID)
+            _addFiles(os.path.join(rootDir, item), folderItem, productElement, componentsRoot)
+        elif os.path.isfile(item):
+            if curDirRef is None:
+                curDirRef = _createDirectoryRef(productElement, rootFolderId)
+            component = _createComponent(curDirRef, componentsRoot, itemID)
+            _addFile(component, str(os.path.join(rootDir, item)), str(item))
+
 def run():
     # setup header
     root = ET.Element('Wix')
+    root.set("xmlns", "http://schemas.microsoft.com/wix/2006/wi")
     product = ET.SubElement(root, "Product")
     _setAttributesWithUUIDCheck(product, _productAttributes)
     package = ET.SubElement(product, 'Package')
@@ -132,9 +157,6 @@ def run():
     _createFolderElement(programMenu, "ApplicationProgramsFolder", "Dancebots")
 
     # add components root:
-    componentsRoot = _createFolderElement(product, "APPLICATIONROOTDIRECTORY")
-    
-    # and install actions:
     componentsRoot = ET.SubElement(product, 'Feature')
     componentsRoot.set("Id", "DancebotsEditor")
     componentsRoot.set("Title", "DancebotsEditor")
@@ -150,9 +172,8 @@ def run():
     shortCutReg = ET.SubElement(appFolderComponent, "RegistryValue")
     _setAttributesWithUUIDCheck(shortCutReg, _shortCutRegistryAttributes)
 
-    # directory structure setup:
-
-
+    # recursive directory structure setup:
+    _addFiles("./Release", programRoot, product, componentsRoot)
 
     # finalize
     tree = ET.ElementTree(root)
