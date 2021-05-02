@@ -11,7 +11,7 @@ _productAttributes = {
     "UpgradeCode":_UPGRADECODE,
     "Version":"1.2.0",
     "Language": "1033",
-    "Name":"Dancebots",
+    "Name":"DanceBots Editor",
     "Manufacturer":"Mint and Pepper"
 }
 
@@ -114,21 +114,26 @@ def _addFile(component: ET.Element, srcStr: str, idStr:str) -> ET.Element:
     if srcStr[-3:] == "exe":
         file.set("Checksum", "yes")
 
-def _addFiles(rootDir: str, rootFolderElement: ET.Element, productElement: ET.Element, componentsRoot):
+def _addFiles(rootDir: str, rootFolderElement: ET.Element, productElement: ET.Element, componentsRoot, itemNum) -> int:
     items = os.listdir(rootDir)
     rootFolderId = rootFolderElement.get("Id")
     curDirRef = None  # lazy add only if a file is present
     for item in items:
- 
-        itemID = rootFolderId + "_" + str(item)
-        if os.path.isdir(item):
-            folderItem = _createFolderElement(rootFolderElement, itemID)
-            _addFiles(os.path.join(rootDir, item), folderItem, productElement, componentsRoot)
-        elif os.path.isfile(item):
+        if item == "dancebotsEditor.exe":
+            itemID = "dancebotsEditor.exe"
+        else:
+            itemID = f"ITEM_{itemNum:03d}"
+            itemNum += 1
+        itemPath = os.path.join(rootDir, item)
+        if os.path.isdir(itemPath):
+            folderItem = _createFolderElement(rootFolderElement, itemID, str(item))
+            itemNum = _addFiles(os.path.join(rootDir, item), folderItem, productElement, componentsRoot, itemNum)
+        elif os.path.isfile(itemPath):
             if curDirRef is None:
                 curDirRef = _createDirectoryRef(productElement, rootFolderId)
             component = _createComponent(curDirRef, componentsRoot, itemID)
-            _addFile(component, str(os.path.join(rootDir, item)), str(item))
+            _addFile(component, str(itemPath), itemID)
+    return itemNum
 
 def run():
     # setup header
@@ -146,6 +151,16 @@ def run():
     _setAttributesWithUUIDCheck(uninstallIcon, _uninstallIconAttributes)
     majorUpgrade = ET.SubElement(product, 'MajorUpgrade')
     _setAttributesWithUUIDCheck(majorUpgrade, _majorUpgradeAttributes)
+
+    # setup UX:
+    installDirProperty = ET.SubElement(product, 'Property')
+    installDirProperty.set("Id", "WIXUI_INSTALLDIR")
+    installDirProperty.set("Value", "APPLICATIONROOTDIRECTORY")
+    uiRef = ET.SubElement(product, 'UIRef')
+    uiRef.set("Id", "WixUI_InstallDir")
+    uiLicense = ET.SubElement(product, 'WixVariable')
+    uiLicense.set("Id", "WixUILicenseRtf")
+    uiLicense.set("Value", "LICENSE.rtf")
 
     # setup program root folder:
     sourceDir = _createFolderElement(product, "TARGETDIR", "SourceDir")
@@ -173,7 +188,7 @@ def run():
     _setAttributesWithUUIDCheck(shortCutReg, _shortCutRegistryAttributes)
 
     # recursive directory structure setup:
-    _addFiles("./Release", programRoot, product, componentsRoot)
+    _addFiles(".\\Release", programRoot, product, componentsRoot, 42)
 
     # finalize
     tree = ET.ElementTree(root)
